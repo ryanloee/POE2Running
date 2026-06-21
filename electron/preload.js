@@ -48,6 +48,27 @@ contextBridge.exposeInMainWorld('api', {
   // AI 连接测试(发"你好"验证链路)
   testAI: (settings) => ipcRenderer.invoke('ai:test', plain(settings)),
 
+  // AI Agent:让 AI 自主去市集搜装备
+  runTradeAgent: (payload) => ipcRenderer.invoke('ai:tradeAgent', plain(payload)),
+  onAgentChunk: (callback) => {
+    const handler = (_e, chunk) => callback(chunk);
+    ipcRenderer.on('agent:chunk', handler);
+    return () => ipcRenderer.removeListener('agent:chunk', handler);
+  },
+  onAgentTool: (callback) => {
+    const handler = (_e, info) => callback(info);
+    ipcRenderer.on('agent:tool', handler);
+    return () => ipcRenderer.removeListener('agent:tool', handler);
+  },
+
+  // Agent 对话(多轮+工具)
+  agentChat: (payload) => ipcRenderer.invoke('agent:chat', plain(payload)),
+  agentNew: (title) => ipcRenderer.invoke('agent:new', title),
+  agentConversations: () => ipcRenderer.invoke('agent:conversations'),
+  agentHistory: (id) => ipcRenderer.invoke('agent:history', id),
+  agentDelete: (id) => ipcRenderer.invoke('agent:delete', id),
+  agentRename: (id, title) => ipcRenderer.invoke('agent:rename', id, title),
+
   // 知识库
   kbStatus: () => ipcRenderer.invoke('knowledge:status'),
   kbBuildDocs: () => ipcRenderer.invoke('knowledge:buildDocs'),

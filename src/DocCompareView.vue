@@ -20,6 +20,15 @@ const aiThinking = ref('');
 const aiError = ref('');
 let offChunk = null;
 
+// AI Agent(去市集挑装备)
+const agentRunning = ref(false);
+const agentResult = ref('');
+const agentThinking = ref('');
+const agentToolLog = ref([]); // 搜索过程日志
+const agentError = ref('');
+let offAgentChunk = null;
+let offAgentTool = null;
+
 const hasApi = () => props.settings?.apiKey && props.settings?.apiModel;
 
 function extractShareCode(input) {
@@ -75,6 +84,42 @@ async function analyze() {
     if (res.content?.length > aiResult.value.length) aiResult.value = res.content;
   } catch (e) { aiError.value = e.message; }
   finally { aiAnalyzing.value = false; if (offChunk) { offChunk(); offChunk = null; } }
+}
+
+// AI Agent:让 AI 自主去市集搜装备并推荐
+async function runAgent() {
+  if (!bd.value) { agentError.value = '请先查询角色分享码'; return; }
+  agentRunning.value = true;
+  agentError.value = '';
+  agentResult.value = '';
+  agentThinking.value = '';
+  agentToolLog.value = [];
+  // 注册流式回调
+  if (offAgentChunk) offAgentChunk();
+  if (offAgentTool) offAgentTool();
+  offAgentChunk = window.api.onAgentChunk((chunk) => {
+    if (chunk.type === 'reasoning') agentThinking.value += chunk.text;
+    else if (chunk.type === 'content') agentResult.value += chunk.text;
+  });
+  offAgentTool = window.api.onAgentTool((info) => {
+    if (info.stage === 'searching') {
+      agentToolLog.value.push(`🔍 搜索: ${info.itemType}${info.stats?.length ? ' (补:' + info.stats.join('/') + ')' : ''}`);
+    } else if (info.stage === 'found') {
+      agentToolLog.value.push(`   ✓ 找到 ${info.total} 件在售,取样 ${info.count} 件给 AI 分析`);
+    }
+  });
+  try {
+    const res = await window.api.runTradeAgent({ bd: bd.value, question: '' });
+    if (!res.ok) throw new Error(res.error);
+    if (res.recommendation && res.recommendation.length > agentResult.value.length) {
+      agentResult.value = res.recommendation;
+    }
+  } catch (e) { agentError.value = e.message; }
+  finally {
+    agentRunning.value = false;
+    if (offAgentChunk) { offAgentChunk(); offAgentChunk = null; }
+    if (offAgentTool) { offAgentTool(); offAgentTool = null; }
+  }
 }
 
 function renderMd(md) {

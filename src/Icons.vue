@@ -108,6 +108,19 @@ const props = defineProps({
     <line x1="6" y1="6" x2="18" y2="18"/>
   </svg>
 
+  <!-- 菜单/汉堡 -->
+  <svg v-else-if="name === 'menu'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="3" y1="12" x2="21" y2="12"/>
+    <line x1="3" y1="6" x2="21" y2="6"/>
+    <line x1="3" y1="18" x2="21" y2="18"/>
+  </svg>
+
+  <!-- 加号/新建 -->
+  <svg v-else-if="name === 'plus'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19"/>
+    <line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+
   <!-- 菱形/列表项 -->
   <svg v-else-if="name === 'diamond'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <rect x="4.5" y="4.5" width="15" height="15" rx="1" transform="rotate(45 12 12)"/>

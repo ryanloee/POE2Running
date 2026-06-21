@@ -289,6 +289,140 @@ function registerIpc() {
     return await ai.testConnection(settings);
   });
 
+  // AI Agent:让 AI 自主去市集搜装备并推荐
+  // payload: { bd, question? }
+  ipcMain.handle('ai:tradeAgent', async (event, payload) => {
+    try {
+      const settings = readSettings();
+      // 先检查市集登录
+      const loginStatus = await trade.checkLogin({ session, net });
+      if (!loginStatus.loggedIn) {
+        return { ok: false, error: '市集未登录,请先在「市集」页登录 QQ' };
+      }
+      const agent = require('./services/ai-agent');
+      // 流式推送思考/搜索过程
+      const result = await agent.runTradeAgent(
+        { session, net },
+        settings,
+        payload.bd,
+        payload.question || '',
+        // onChunk:思考过程和推荐文本
+        (chunk) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send('agent:chunk', chunk);
+          }
+        },
+        // onToolCall:搜索过程通知
+        (info) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send('agent:tool', info);
+          }
+        }
+      );
+      return { ok: true, ...result };
+    } catch (e) {
+      console.error('[ai:tradeAgent] 错误:', e.message);
+      return { ok: false, error: String(e.message || e) };
+    }
+  });
+
+  // ============ Agent 对话 ============
+  const conversation = require('./services/conversation');
+  conversation.setConvDir(path.join(app.getPath('userData'), 'conversations'));
+
+  // 新建对话
+  ipcMain.handle('agent:new', async (_event, title) => {
+    return conversation.createConversation(title);
+  });
+
+  // 对话列表
+  ipcMain.handle('agent:conversations', async () => {
+    return conversation.listConversations();
+  });
+
+  // 加载对话历史
+  ipcMain.handle('agent:history', async (_event, id) => {
+    return conversation.loadConversation(id);
+  });
+
+  // 删除对话
+  ipcMain.handle('agent:delete', async (_event, id) => {
+    conversation.deleteConversation(id);
+    return { ok: true };
+  });
+
+  // 重命名对话
+  ipcMain.handle('agent:rename', async (_event, id, title) => {
+    conversation.renameConversation(id, title);
+    return { ok: true };
+  });
+
+  // Agent 对话(带工具调用的多轮对话)
+  ipcMain.handle('agent:chat', async (event, payload) => {
+    const { conversationId, message, attachments } = payload;
+    try {
+      const settings = readSettings();
+      if (settings.proxyUrl) configureProxy(settings.proxyUrl);
+
+      // 保存用户消息
+      conversation.appendMessage(conversationId, { role: 'user', content: message });
+
+      // 获取对话历史(AI messages 格式)
+      const history = conversation.toAIMessages(conversationId);
+      // 去掉最后一条(就是刚加的 user message,runAgent 会自己加)
+      history.pop();
+
+      // 如果有附件(文档),追加到用户消息中
+      let fullMessage = message;
+      if (attachments && attachments.length > 0) {
+        const docParts = attachments.map((a) => `[附件: ${a.name}]\n${a.text}`).join('\n\n');
+        fullMessage += '\n\n' + docParts;
+      }
+
+      // 检查市集登录(如果可能用到市集)
+      let tradeSession = null;
+      try {
+        const loginStatus = await trade.checkLogin({ session, net });
+        if (loginStatus.loggedIn) tradeSession = { session, net };
+      } catch (_) {}
+
+      const agent = require('./services/ai-agent');
+      let thinkingContent = '';
+
+      const result = await agent.runAgent({
+        settings,
+        history,
+        userMessage: fullMessage,
+        electron: tradeSession,
+        // 流式推送
+        onChunk: (chunk) => {
+          if (!event.sender.isDestroyed()) {
+            if (chunk.type === 'thinking') thinkingContent += chunk.text;
+            event.sender.send('agent:chunk', chunk);
+          }
+        },
+        onToolCall: (info) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send('agent:tool', info);
+          }
+        },
+      });
+
+      // 保存 assistant 回复
+      conversation.appendMessage(conversationId, {
+        role: 'assistant',
+        content: result.content,
+        thinking: thinkingContent || undefined,
+        toolCalls: result.toolCalls?.length ? result.toolCalls : undefined,
+      });
+
+      return { ok: true, content: result.content, toolCalls: result.toolCalls };
+    } catch (e) {
+      console.error('[agent:chat] 错误:', e.message);
+      return { ok: false, error: String(e.message || e) };
+    }
+  });
+
   // ============ 知识库 ============
   // 知识库状态
   ipcMain.handle('knowledge:status', async () => {
