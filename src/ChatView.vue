@@ -40,6 +40,35 @@ const streamingThinking = ref('');
 const streamingContent = ref('');
 const attachments = ref([]); // 上传的文档
 
+// ===== 快捷 BD 查询 =====
+const quickShareCode = ref('');
+const quickBdData = ref(null);
+const quickBdText = ref('');
+const quickBdError = ref('');
+const quickLoading = ref(false);
+
+function extractShareCode(input) {
+  if (!input) return '';
+  let s = input.trim();
+  const m = s.match(/#\/share\/([A-Za-z0-9_\-]+)/);
+  if (m) return m[1];
+  return s.replace(/\s+/g, '');
+}
+
+async function quickFetchBD() {
+  const code = extractShareCode(quickShareCode.value);
+  if (!code) { quickBdError.value = '请输入分享码'; return; }
+  quickLoading.value = true; quickBdError.value = ''; quickBdData.value = null;
+  try {
+    const res = await window.api.fetchBD(code);
+    if (!res.ok) throw new Error(res.error);
+    quickBdData.value = res.data;
+    // 同时获取精简文本给 agent 用
+    quickBdText.value = `[玩家BD: ${res.data.role?.name} ${res.data.role?.class_name} Lv${res.data.role?.level}]\n分享码: ${code}`;
+  } catch (e) { quickBdError.value = e.message; }
+  finally { quickLoading.value = false; }
+}
+
 let offChunk = null;
 let offTool = null;
 
@@ -215,19 +244,30 @@ onUnmounted(() => {
           <div class="empty-icon">🤖</div>
           <div class="empty-title">POE2 BD 智能配装 Agent</div>
           <div class="empty-desc">
-            问我任何关于流放之路2的问题！<br>
-            我可以帮你查 BD、分析短板、搜市集装备、查游戏数据。
+            输入分享码查询 BD，或直接问我任何游戏问题！<br>
+            我可以帮你查 BD、分析短板、搜市集装备、查游戏知识库。
           </div>
+
+          <!-- BD 快捷查询 -->
+          <div class="quick-bd">
+            <div class="quick-bd-row">
+              <input type="text" v-model="quickShareCode" placeholder="粘贴你的分享码或链接..." class="quick-bd-input" @keyup.enter="quickFetchBD" />
+              <button class="quick-bd-btn" @click="quickFetchBD" :disabled="quickLoading">
+                {{ quickLoading ? '查询中...' : '🔍 查询 BD' }}
+              </button>
+            </div>
+            <div v-if="quickBdData" class="quick-bd-result">
+              ✅ 已加载 <strong>{{ quickBdData.role?.name }}</strong> ({{ quickBdData.role?.class_name }} Lv{{ quickBdData.role?.level }})
+              <button class="quick-action" @click="inputText = `帮我分析这个BD的短板和提升建议:\n${quickBdText}`; sendMessage()">📊 分析短板</button>
+              <button class="quick-action" @click="inputText = `帮我在这个BD基础上搜市集,找最值得升级的装备:\n${quickBdText}`; sendMessage()">🛒 搜市集推荐</button>
+            </div>
+            <div v-if="quickBdError" class="quick-bd-error">❌ {{ quickBdError }}</div>
+          </div>
+
           <div class="empty-examples">
-            <button class="example-btn" @click="inputText = '帮我分析这个BD的短板: lePqIvMTUCeSzPPfEhVSLLKnvIo2o_x_IMPmnW4nrCvs_Ar3N2BQU3G-P9kS735L'; sendMessage()">
-              📊 分析 BD 短板
-            </button>
-            <button class="example-btn" @click="inputText = '火抗词缀最高能到多少？帮我查一下知识库'; sendMessage()">
-              📚 查游戏知识
-            </button>
-            <button class="example-btn" @click="inputText = '市集上有没有便宜的火抗胸甲？'; sendMessage()">
-              🛒 搜索市集
-            </button>
+            <button class="example-btn" @click="inputText = '帮我查一下火抗词缀最高能到多少'; sendMessage()">📚 查游戏知识</button>
+            <button class="example-btn" @click="inputText = '市集上有没有便宜的火抗胸甲？帮我搜一下'; sendMessage()">🛒 搜索市集</button>
+            <button class="example-btn" @click="uploadFile()">📎 上传攻略文档对比</button>
           </div>
         </div>
 
@@ -356,6 +396,18 @@ onUnmounted(() => {
 .empty-examples { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
 .example-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; color: var(--text); }
 .example-btn:hover { border-color: var(--accent); background: var(--accent-dim); }
+
+/* 快捷 BD 查询 */
+.quick-bd { width: 100%; max-width: 520px; margin-top: 12px; }
+.quick-bd-row { display: flex; gap: 8px; }
+.quick-bd-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 13px; outline: none; }
+.quick-bd-input:focus { border-color: var(--accent); }
+.quick-bd-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px 18px; font-size: 13px; cursor: pointer; white-space: nowrap; font-weight: 600; }
+.quick-bd-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.quick-bd-result { margin-top: 10px; background: var(--bg); border: 1px solid var(--success); border-radius: 8px; padding: 10px 14px; font-size: 13px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.quick-action { background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; color: var(--accent); white-space: nowrap; }
+.quick-action:hover { background: var(--accent); color: #fff; }
+.quick-bd-error { margin-top: 8px; color: var(--danger); font-size: 13px; }
 
 /* 消息 */
 .msg { max-width: 85%; }
