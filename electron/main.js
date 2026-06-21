@@ -1,7 +1,8 @@
 // Electron 主进程入口
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const trade = require('./services/trade');
 
 // ============================================
 // 全局代理(global-agent 猴补丁 http/https,对 Node 内置 fetch 也生效)
@@ -49,6 +50,36 @@ try {
 
 const isDev = process.env.NODE_ENV === 'development';
 let mainWindow = null;
+let tradeWindow = null; // 市集登录/搜索窗口
+
+// 市集登录窗口:用持久化 partition 存 QQ 登录态
+function createTradeWindow(initialUrl) {
+  if (tradeWindow && !tradeWindow.isDestroyed()) {
+    tradeWindow.focus();
+    if (initialUrl) tradeWindow.loadURL(initialUrl);
+    return tradeWindow;
+  }
+  tradeWindow = new BrowserWindow({
+    width: 1100,
+    height: 760,
+    title: 'POE2 市集',
+    webPreferences: {
+      partition: trade.TRADE_PARTITION, // 持久化分区,cookie 存这里
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  tradeWindow.loadURL(initialUrl || `${trade.BASE}/trade2/search/${trade.LEAGUE}`);
+  tradeWindow.on('closed', () => {
+    tradeWindow = null;
+    // 通知主窗口登录状态可能变化
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('trade:login-changed', {});
+    }
+  });
+  return tradeWindow;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -184,6 +215,56 @@ function registerIpc() {
         }
       });
       console.log('[ai:analyze] 完成, 长度:', full?.length);
+
+      // AI 分析完后自动搜装备(异步,不阻塞返回)
+      // 先检查市集登录态,已登录才搜
+      try {
+        const loginStatus = await trade.checkLogin({ session, net });
+        if (loginStatus.loggedIn) {
+          const skills = require('./services/skills');
+          // 双线索生成搜索任务(比单一正则可靠):
+          // 1. AI 文本推荐(parseAIRecommendations)
+          // 2. BD 数据差距分析(generateSearchTasks)—— 抗性/生命不足时自动推荐
+          const aiTasks = skills.parseAIRecommendations(full);
+          const bdTasks = skills.generateSearchTasks(payload.bdA);
+          // 合并去重(按装备类型)
+          const seen = new Set();
+          const tasks = [...aiTasks, ...bdTasks].filter((t) => {
+            if (seen.has(t.type)) return false;
+            seen.add(t.type);
+            return true;
+          }).slice(0, 5);
+
+          if (tasks.length) {
+            const tradeResults = [];
+            for (const task of tasks) {
+              try {
+                // 用 skills 的精确 query 构造(词缀 ID 过滤),而非简单类型搜索
+                const query = skills.buildPreciseQuery(task);
+                const res = await trade.search({ session, net }, query, 10);
+                tradeResults.push({
+                  need: task.type,
+                  reason: task.reason,
+                  intents: task.intents || [],
+                  total: res.total,
+                  items: res.items.slice(0, 5),
+                });
+              } catch (e) {
+                tradeResults.push({ need: task.type, error: e.message });
+              }
+            }
+            if (tradeResults.length && !event.sender.isDestroyed()) {
+              event.sender.send('trade:auto-results', { results: tradeResults });
+            }
+          }
+        } else if (!event.sender.isDestroyed()) {
+          // 未登录,提示用户
+          event.sender.send('trade:auto-results', { needLogin: true, reason: loginStatus.reason });
+        }
+      } catch (e) {
+        console.error('[ai:analyze] 市集自动搜索失败(非致命):', e.message);
+      }
+
       return { ok: true, content: full };
     } catch (e) {
       console.error('[ai:analyze] 错误:', e.message);
@@ -262,6 +343,66 @@ function registerIpc() {
       const settings = readSettings();
       const retriever = require('./services/knowledge/retriever');
       const results = await retriever.retrieve(settings, query, 5);
+      return { ok: true, results };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // ============ 市集 ============
+  // 检查市集登录态
+  ipcMain.handle('trade:checkLogin', async () => {
+    try {
+      const result = await trade.checkLogin({ session, net });
+      // 诊断:打印市集 session 的所有 cookie
+      const tradeSes = session.fromPartition(trade.TRADE_PARTITION);
+      const cookies = await tradeSes.cookies.get({});
+      console.log('[trade:checkLogin] 结果:', JSON.stringify(result));
+      console.log('[trade:checkLogin] 市集session的cookie数:', cookies.length);
+      const poe = cookies.filter((c) => c.domain.includes('poe.game') || c.name === 'POESESSID');
+      console.log('[trade:checkLogin] poe相关cookie:', poe.map((c) => c.name + '@' + c.domain).join(', '));
+      return result;
+    } catch (e) {
+      console.error('[trade:checkLogin] 异常:', e.message);
+      return { loggedIn: false, reason: e.message };
+    }
+  });
+
+  // 打开市集登录窗口
+  ipcMain.handle('trade:openLogin', async () => {
+    createTradeWindow();
+    return { ok: true };
+  });
+
+  // 搜索市集装备
+  // payload: { type, statIds?, limit? } 或 { query, limit? }
+  ipcMain.handle('trade:search', async (_event, payload) => {
+    try {
+      const query = payload.query || trade.buildQuery({ type: payload.type, statIds: payload.statIds });
+      const result = await trade.search({ session, net }, query, payload.limit || 20);
+      return { ok: true, result };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // 根据 AI 分析结果自动搜装备(提取 AI 提到的装备类型,逐个搜)
+  ipcMain.handle('trade:searchFromAI', async (_event, { aiResult, limit }) => {
+    try {
+      const needs = trade.extractNeedsFromAI(aiResult);
+      if (!needs.length) {
+        return { ok: true, results: [], note: 'AI 分析结果中未识别到可搜索的装备类型' };
+      }
+      const results = [];
+      for (const need of needs.slice(0, 5)) {
+        try {
+          const query = trade.buildQuery(need);
+          const res = await trade.search({ session, net }, query, limit || 10);
+          results.push({ need, total: res.total, items: res.items.slice(0, 5) });
+        } catch (e) {
+          results.push({ need, error: e.message });
+        }
+      }
       return { ok: true, results };
     } catch (e) {
       return { ok: false, error: e.message };

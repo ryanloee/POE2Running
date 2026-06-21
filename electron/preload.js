@@ -61,6 +61,22 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('kb:progress', handler);
   },
 
+  // 市集
+  tradeCheckLogin: () => ipcRenderer.invoke('trade:checkLogin'),
+  tradeOpenLogin: () => ipcRenderer.invoke('trade:openLogin'),
+  tradeSearch: (payload) => ipcRenderer.invoke('trade:search', plain(payload)),
+  tradeSearchFromAI: (payload) => ipcRenderer.invoke('trade:searchFromAI', plain(payload)),
+  onTradeAutoResults: (callback) => {
+    const handler = (_e, results) => callback(results);
+    ipcRenderer.on('trade:auto-results', handler);
+    return () => ipcRenderer.removeListener('trade:auto-results', handler);
+  },
+  onTradeLoginChanged: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('trade:login-changed', handler);
+    return () => ipcRenderer.removeListener('trade:login-changed', handler);
+  },
+
   // 导出报告
   exportReport: (bd) => ipcRenderer.invoke('export:report', plain(bd)),
 

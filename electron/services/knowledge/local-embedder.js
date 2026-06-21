@@ -124,12 +124,13 @@ async function getPipeline(modelName, onProgress) {
   }
 }
 
-async function embedBatch(texts, modelName, onProgress) {
-  const pipe = await getPipeline(modelName, onProgress);
+async function embedBatch(texts, modelName, onProgress, proxyUrl) {
+  const pipe = await getPipeline(modelName, onProgress, proxyUrl);
   const vectors = [];
   for (let i = 0; i < texts.length; i++) {
-    const percent = texts.length > 0 ? ((i + 1) / texts.length) * 100 : 0;
-    onProgress && onProgress({ stage: 'embed', percent, detail: `向量化 ${i + 1}/${texts.length}`, done: i + 1, total: texts.length });
+    // 进度只报 batch 内的位置(done/total),percent 由上层 indexer 按总数换算
+    // 这样避免 batch 内 0-100 反复循环的假象
+    onProgress && onProgress({ stage: 'embed', done: i + 1, total: texts.length, batchPercent: texts.length > 0 ? ((i + 1) / texts.length) * 100 : 0 });
     const output = await pipe(texts[i], { pooling: 'mean', normalize: true });
     vectors.push(Array.from(output.data));
   }

@@ -55,17 +55,18 @@ async function buildIndex() {
   building.value = 'index';
   error.value = '';
   progressPercent.value = 0;
+  progressStage.value = '';
   progress.value = '开始向量化(首次需下载模型)...';
   try {
     const res = await window.api.kbBuildIndex();
     if (!res.ok) throw new Error(res.error);
     await refreshStatus();
-    progress.value = `向量化完成: ${res.result.count} 条,维度 ${res.result.dim}`;
+    progress.value = `✓ 向量化完成: ${res.result.count} 条,维度 ${res.result.dim}`;
+    progressPercent.value = 100;
   } catch (e) {
     error.value = e.message;
   } finally {
     building.value = '';
-    progressPercent.value = 0;
   }
 }
 
@@ -133,7 +134,10 @@ function fmtDate(iso) {
 
     <!-- 进度 -->
     <div v-if="progress" class="progress-box">
-      <div>{{ progress }}</div>
+      <div class="progress-detail">
+        <span v-if="progressStage && stageLabel[progressStage]" class="stage-tag">{{ stageLabel[progressStage] }}</span>
+        <span>{{ progress }}</span>
+      </div>
       <div v-if="progressStage === 'download' || progressStage === 'embed'" class="progress-bar-container">
         <div class="progress-bar">
           <div class="progress-bar-fill" :style="{ width: progressPercent + '%' }"></div>
@@ -180,6 +184,8 @@ function fmtDate(iso) {
 .si-value.off { color: var(--text-dim); }
 .cat-line { font-size: 12px; color: var(--text-dim); margin-top: 10px; }
 .progress-box { margin-top: 12px; padding: 10px 12px; background: var(--bg); border-radius: 6px; font-size: 13px; color: var(--accent); }
+.progress-detail { display: flex; align-items: center; gap: 8px; }
+.stage-tag { background: var(--accent); color: #1a1d27; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
 .progress-bar-container { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .progress-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
 .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s ease; }

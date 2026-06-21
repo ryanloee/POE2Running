@@ -21,7 +21,8 @@ function vectorsPath() {
  */
 async function embedBatch(settings, texts, onProgress) {
   const modelName = settings.localModelName || localEmbedder.DEFAULT_MODEL;
-  return await localEmbedder.embedBatch(texts, modelName, onProgress);
+  const proxyUrl = settings.proxyUrl || '';
+  return await localEmbedder.embedBatch(texts, modelName, onProgress, proxyUrl);
 }
 
 /**
@@ -29,13 +30,15 @@ async function embedBatch(settings, texts, onProgress) {
  */
 async function embedQuery(settings, text) {
   const modelName = settings.localModelName || localEmbedder.DEFAULT_MODEL;
-  return await localEmbedder.embedQuery(text, modelName);
+  const proxyUrl = settings.proxyUrl || '';
+  return await localEmbedder.embedQuery(text, modelName, proxyUrl);
 }
 
 /**
  * 对全部文档建索引:批量 embedding + 存盘
+ * 总进度映射:下载阶段 0-30%,加载 30-35%,向量化 35-100%(单调递增,不倒退)
  * @param {object} settings 配置
- * @param {function} onProgress (done, total, detail) => void
+ * @param {function} onProgress (info) => void  info={stage,percent,detail}
  */
 async function buildIndex(settings, onProgress) {
   const docs = builder.loadDocs();
@@ -55,14 +58,19 @@ async function buildIndex(settings, onProgress) {
       try {
         vecs = await embedBatch(settings, texts, (info) => {
           if (!onProgress) return;
-          // 下载/加载阶段:直接透传(只在第一个 batch 时发生)
-          if (info.stage === 'download' || info.stage === 'load') {
-            onProgress(info);
+          // 下载阶段:映射到 0-30%
+          if (info.stage === 'download') {
+            const mapped = (info.percent || 0) * 0.3;
+            onProgress({ stage: 'download', percent: mapped, detail: info.detail || '下载模型' });
+          } else if (info.stage === 'load') {
+            // 加载:30-35%
+            onProgress({ stage: 'load', percent: 32 + (info.percent || 0) * 0.03, detail: info.detail || '加载模型' });
           } else if (info.stage === 'embed') {
-            // 向量化阶段:把当前 batch 内进度换算成总进度
+            // 向量化:35-100%(基于总文档数,单调递增)
             const batchDone = info.done || 0;
             const overall = processed + batchDone;
-            const percent = total > 0 ? (overall / total) * 100 : 0;
+            const embedRatio = total > 0 ? overall / total : 0;
+            const percent = 35 + embedRatio * 65; // 35% 到 100%
             onProgress({ stage: 'embed', percent, detail: `向量化 ${overall}/${total}`, done: overall, total });
           }
         });
@@ -77,7 +85,10 @@ async function buildIndex(settings, onProgress) {
       vectors.push({ id: d.id, type: d.type, title: d.title, vector: vecs[j] });
     });
     // 每个 batch 完成后报一次总进度
-    if (onProgress) onProgress({ stage: 'embed', percent: total > 0 ? (processed / total) * 100 : 0, detail: `向量化 ${processed}/${total}`, done: processed, total });
+    if (onProgress) {
+      const embedRatio = total > 0 ? processed / total : 0;
+      onProgress({ stage: 'embed', percent: 35 + embedRatio * 65, detail: `向量化 ${processed}/${total}`, done: processed, total });
+    }
   }
 
   // 存盘(向量 + 维度信息)
