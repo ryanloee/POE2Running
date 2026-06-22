@@ -359,7 +359,7 @@ function registerIpc() {
 
   // Agent 对话(带工具调用的多轮对话)
   ipcMain.handle('agent:chat', async (event, payload) => {
-    const { conversationId, message, attachments } = payload;
+    const { conversationId, message, context } = payload;
     try {
       const settings = readSettings();
       if (settings.proxyUrl) configureProxy(settings.proxyUrl);
@@ -371,13 +371,6 @@ function registerIpc() {
       const history = conversation.toAIMessages(conversationId);
       // 去掉最后一条(就是刚加的 user message,runAgent 会自己加)
       history.pop();
-
-      // 如果有附件(文档),追加到用户消息中
-      let fullMessage = message;
-      if (attachments && attachments.length > 0) {
-        const docParts = attachments.map((a) => `[附件: ${a.name}]\n${a.text}`).join('\n\n');
-        fullMessage += '\n\n' + docParts;
-      }
 
       // 检查市集登录(如果可能用到市集)
       let tradeSession = null;
@@ -392,7 +385,8 @@ function registerIpc() {
       const result = await agent.runAgent({
         settings,
         history,
-        userMessage: fullMessage,
+        userMessage: message,
+        systemContext: context || undefined,
         electron: tradeSession,
         // 流式推送
         onChunk: (chunk) => {
