@@ -40,7 +40,7 @@ async function getTransformers() {
  * @param {function} onProgress 标准化进度回调 (info) => void
  *   info = { stage: 'download'|'load'|'embed', percent: 0-100, detail: '...' }
  */
-async function getPipeline(modelName, onProgress) {
+async function getPipeline(modelName, onProgress, proxyUrl) {
   const key = modelName || DEFAULT_MODEL;
 
   // 模型已缓存且没换,直接用
@@ -50,69 +50,45 @@ async function getPipeline(modelName, onProgress) {
   const cacheDir = MODEL_DIR || path.join(process.cwd(), '.models');
   fs.mkdirSync(cacheDir, { recursive: true });
 
-  onProgress && onProgress({ stage: 'load', percent: 0, detail: `加载模型 ${key} (${modelInfo.desc})` });
+  // 先检查模型是否已下载,如果没有则用 model-downloader(支持国内镜像)
+  const modelDir = path.join(cacheDir, modelInfo.id.replace('/', '--'));
+  const modelFile = path.join(modelDir, 'onnx', 'model_quantized.onnx');
+  if (!fs.existsSync(modelFile) || fs.statSync(modelFile).size < 1000000) {
+    onProgress && onProgress({ stage: 'download', percent: 0, detail: `准备下载 ${key}...` });
+    try {
+      const downloader = require('./model-downloader');
+      if (downloader.MODEL_FILES[key]) {
+        // 用 model-downloader 走国内镜像下载
+        // 不传 proxyUrl(global-agent 已全局代理)
+        await downloader.downloadModel(key, cacheDir, null, (fileIndex, fileName, loaded, total) => {
+          if (!onProgress) return;
+          const percent = total > 0 ? Math.min(100, (loaded / total) * 100) : 0;
+          onProgress({ stage: 'download', percent, detail: `下载 ${fileName}` });
+        });
+        onProgress && onProgress({ stage: 'download', percent: 100, detail: '下载完成' });
+      }
+    } catch (e) {
+      console.error('[embed] 镜像下载失败,尝试直连:', e.message);
+    }
+  }
 
   try {
     const { pipeline, env } = await getTransformers();
     env.allowRemoteModels = true;
     env.allowLocalModels = true;
     env.localModelPath = cacheDir;
-
-    // 下载进度跟踪:transformers 会对每个文件多次回调
-    // 用每个文件最大的 loaded/total 算百分比
-    const fileProgress = {}; // {fileName: {loaded, total}}
-    onProgress && onProgress({ stage: 'download', percent: 0, detail: '准备下载...' });
+    onProgress && onProgress({ stage: 'load', percent: 0, detail: `加载模型 ${key}...` });
 
     cachedPipeline = await pipeline('feature-extraction', modelInfo.id, {
       cache_dir: cacheDir,
       local_files_only: false,
       quantized: true,
       progress_callback: (progress) => {
-        if (!onProgress) return;
-        // transformers 的 progress 对象:
-        //   { status: 'initiate', name, file }           → 文件开始下载(无 loaded/total)
-        //   { status: 'progress', file, loaded, total }  → 下载中(有进度)
-        //   { status: 'done', file }                     → 文件下载完成(无 loaded/total)
-
-        // initiate:通知用户正在下载哪个文件
-        if (progress.status === 'initiate') {
-          const name = progress.name || progress.file || '';
-          onProgress({ stage: 'download', percent: 0, detail: `准备下载 ${name.split('/').pop() || name}` });
-          return;
+        if (!onProgress || progress.status !== 'progress') return;
+        if (progress.file && progress.total) {
+          const percent = Math.min(100, ((progress.loaded || 0) / progress.total) * 100);
+          onProgress({ stage: 'download', percent, detail: `下载 ${progress.file.split('/').pop()}` });
         }
-
-        // progress:有 loaded/total,更新文件进度
-        if (progress.status === 'progress' && progress.file && progress.total) {
-          fileProgress[progress.file] = { loaded: progress.loaded || 0, total: progress.total };
-        }
-
-        // done:标记文件完成(loaded = total)
-        if (progress.status === 'done' && progress.file) {
-          if (fileProgress[progress.file]) {
-            fileProgress[progress.file].loaded = fileProgress[progress.file].total;
-          } else {
-            // done 事件可能没有对应的 progress 事件(文件很小/缓存命中)
-            fileProgress[progress.file] = { loaded: 1, total: 1 };
-          }
-        }
-
-        // 算总进度:所有文件 loaded 之和 / total 之和
-        let sumLoaded = 0;
-        let sumTotal = 0;
-        for (const f of Object.values(fileProgress)) {
-          sumLoaded += f.loaded;
-          sumTotal += f.total;
-        }
-        const percent = sumTotal > 0 ? Math.min(100, (sumLoaded / sumTotal) * 100) : 0;
-        const fileName = progress.file ? progress.file.split('/').pop() : '';
-        const stageDetail = progress.status === 'done'
-          ? `${fileName} 下载完成`
-          : fileName ? `下载 ${fileName}` : '下载中...';
-        onProgress({
-          stage: 'download',
-          percent,
-          detail: stageDetail,
-        });
       },
     });
 

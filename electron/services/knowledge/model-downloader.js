@@ -16,6 +16,25 @@ const MODEL_FILES = {
       { name: 'vocab.txt', path: 'vocab.txt' },
       { name: 'model_quantized.onnx', path: 'onnx/model_quantized.onnx' },
     ]
+  },
+  'all-MiniLM': {
+    id: 'Xenova/all-MiniLM-L6-v2',
+    files: [
+      { name: 'config.json', path: 'config.json' },
+      { name: 'tokenizer.json', path: 'tokenizer.json' },
+      { name: 'tokenizer_config.json', path: 'tokenizer_config.json' },
+      { name: 'model_quantized.onnx', path: 'onnx/model_quantized.onnx' },
+    ]
+  },
+  'bge-base-zh': {
+    id: 'Xenova/bge-base-zh-v1.5',
+    files: [
+      { name: 'config.json', path: 'config.json' },
+      { name: 'tokenizer.json', path: 'tokenizer.json' },
+      { name: 'tokenizer_config.json', path: 'tokenizer_config.json' },
+      { name: 'vocab.txt', path: 'vocab.txt' },
+      { name: 'model_quantized.onnx', path: 'onnx/model_quantized.onnx' },
+    ]
   }
 };
 

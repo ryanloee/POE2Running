@@ -1,0 +1,953 @@
+{
+  "result": [
+    {
+      "id": "status_filters",
+      "filters": [
+        {
+          "id": "status",
+          "option": {
+            "options": [
+              {
+                "id": "securable",
+                "text": "立即购买"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "type_filters",
+      "title": "类型过滤器",
+      "filters": [
+        {
+          "id": "category",
+          "text": "物品类型",
+          "fullSpan": true,
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "weapon",
+                "text": "任何武器"
+              },
+              {
+                "id": "weapon.onemelee",
+                "text": "任意单手近战武器"
+              },
+              {
+                "id": "weapon.unarmed",
+                "text": "徒手"
+              },
+              {
+                "id": "weapon.claw",
+                "text": "爪"
+              },
+              {
+                "id": "weapon.dagger",
+                "text": "匕首"
+              },
+              {
+                "id": "weapon.onesword",
+                "text": "单手剑"
+              },
+              {
+                "id": "weapon.oneaxe",
+                "text": "单手斧"
+              },
+              {
+                "id": "weapon.onemace",
+                "text": "单手锤"
+              },
+              {
+                "id": "weapon.spear",
+                "text": "战矛"
+              },
+              {
+                "id": "weapon.flail",
+                "text": "连枷"
+              },
+              {
+                "id": "weapon.twomelee",
+                "text": "任意双手近战武器"
+              },
+              {
+                "id": "weapon.twosword",
+                "text": "双手剑"
+              },
+              {
+                "id": "weapon.twoaxe",
+                "text": "双手斧"
+              },
+              {
+                "id": "weapon.twomace",
+                "text": "双手锤"
+              },
+              {
+                "id": "weapon.warstaff",
+                "text": "节杖"
+              },
+              {
+                "id": "weapon.talisman",
+                "text": "魔符"
+              },
+              {
+                "id": "weapon.ranged",
+                "text": "任意远程武器"
+              },
+              {
+                "id": "weapon.bow",
+                "text": "弓"
+              },
+              {
+                "id": "weapon.crossbow",
+                "text": "战弩"
+              },
+              {
+                "id": "weapon.caster",
+                "text": "任意施法者武器"
+              },
+              {
+                "id": "weapon.wand",
+                "text": "法杖"
+              },
+              {
+                "id": "weapon.sceptre",
+                "text": "短杖"
+              },
+              {
+                "id": "weapon.staff",
+                "text": "长杖"
+              },
+              {
+                "id": "weapon.rod",
+                "text": "鱼竿"
+              },
+              {
+                "id": "armour",
+                "text": "任何护甲"
+              },
+              {
+                "id": "armour.helmet",
+                "text": "头盔"
+              },
+              {
+                "id": "armour.chest",
+                "text": "胸甲"
+              },
+              {
+                "id": "armour.gloves",
+                "text": "手套"
+              },
+              {
+                "id": "armour.boots",
+                "text": "鞋子"
+              },
+              {
+                "id": "armour.quiver",
+                "text": "箭袋"
+              },
+              {
+                "id": "armour.shield",
+                "text": "盾"
+              },
+              {
+                "id": "armour.focus",
+                "text": "法器"
+              },
+              {
+                "id": "armour.buckler",
+                "text": "轻盾"
+              },
+              {
+                "id": "accessory",
+                "text": "任何配件"
+              },
+              {
+                "id": "accessory.amulet",
+                "text": "项链"
+              },
+              {
+                "id": "accessory.belt",
+                "text": "腰带"
+              },
+              {
+                "id": "accessory.ring",
+                "text": "戒指"
+              },
+              {
+                "id": "gem",
+                "text": "任何宝石"
+              },
+              {
+                "id": "gem.activegem",
+                "text": "技能宝石"
+              },
+              {
+                "id": "gem.supportgem",
+                "text": "辅助宝石"
+              },
+              {
+                "id": "gem.metagem",
+                "text": "非凡宝石"
+              },
+              {
+                "id": "jewel",
+                "text": "任何珠宝"
+              },
+              {
+                "id": "flask",
+                "text": "任意药剂"
+              },
+              {
+                "id": "flask.life",
+                "text": "生命药剂"
+              },
+              {
+                "id": "flask.mana",
+                "text": "魔力药剂"
+              },
+              {
+                "id": "flask.charm",
+                "text": "Charm"
+              },
+              {
+                "id": "map",
+                "text": "任意终局物品"
+              },
+              {
+                "id": "map.waystone",
+                "text": "引路石"
+              },
+              {
+                "id": "map.fragment",
+                "text": "地图碎片"
+              },
+              {
+                "id": "map.logbook",
+                "text": "日志"
+              },
+              {
+                "id": "map.breachstone",
+                "text": "裂隙石"
+              },
+              {
+                "id": "map.barya",
+                "text": "巨灵币"
+              },
+              {
+                "id": "map.bosskey",
+                "text": "巅峰钥匙"
+              },
+              {
+                "id": "map.ultimatum",
+                "text": "致命贪婪钥匙"
+              },
+              {
+                "id": "map.tablet",
+                "text": "石板"
+              },
+              {
+                "id": "card",
+                "text": "命运卡"
+              },
+              {
+                "id": "sanctum.relic",
+                "text": "遗物"
+              },
+              {
+                "id": "currency",
+                "text": "任何通货"
+              },
+              {
+                "id": "currency.omen",
+                "text": "预兆"
+              },
+              {
+                "id": "currency.socketable",
+                "text": "任何增幅器"
+              },
+              {
+                "id": "currency.rune",
+                "text": "符文"
+              },
+              {
+                "id": "currency.soulcore",
+                "text": "灵核"
+              },
+              {
+                "id": "currency.idol",
+                "text": "魔偶"
+              }
+            ]
+          }
+        },
+        {
+          "id": "rarity",
+          "text": "物品稀有度",
+          "fullSpan": true,
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "normal",
+                "text": "一般"
+              },
+              {
+                "id": "magic",
+                "text": "魔法"
+              },
+              {
+                "id": "rare",
+                "text": "稀有"
+              },
+              {
+                "id": "unique",
+                "text": "传奇"
+              },
+              {
+                "id": "uniquefoil",
+                "text": "传奇（烫金）"
+              },
+              {
+                "id": "nonunique",
+                "text": "任何非传奇"
+              }
+            ]
+          }
+        },
+        {
+          "id": "ilvl",
+          "text": "物品等级",
+          "minMax": true
+        },
+        {
+          "id": "quality",
+          "text": "物品品质",
+          "minMax": true
+        }
+      ]
+    },
+    {
+      "id": "equipment_filters",
+      "title": "装备过滤器",
+      "hidden": true,
+      "filters": [
+        {
+          "id": "damage",
+          "text": "伤害",
+          "minMax": true
+        },
+        {
+          "id": "aps",
+          "text": "每秒攻击次数",
+          "minMax": true
+        },
+        {
+          "id": "crit",
+          "text": "暴击几率",
+          "minMax": true
+        },
+        {
+          "id": "dps",
+          "text": "每秒伤害",
+          "minMax": true
+        },
+        {
+          "id": "pdps",
+          "text": "每秒物理伤害",
+          "minMax": true
+        },
+        {
+          "id": "edps",
+          "text": "每秒元素伤害",
+          "minMax": true
+        },
+        {
+          "id": "reload_time",
+          "text": "装填时间",
+          "minMax": true,
+          "halfSpan": true
+        },
+        {
+          "id": "ar",
+          "text": "护甲",
+          "tip": "包括基础数值、本地词缀、最大品质",
+          "minMax": true
+        },
+        {
+          "id": "ev",
+          "text": "闪避",
+          "tip": "包括基础数值、本地词缀、最大品质",
+          "minMax": true
+        },
+        {
+          "id": "es",
+          "text": "能量护盾",
+          "tip": "包括基础数值、本地词缀、最大品质",
+          "minMax": true
+        },
+        {
+          "id": "ward",
+          "text": "符文结界",
+          "tip": "包括基础数值、本地词缀、最大品质",
+          "minMax": true
+        },
+        {
+          "id": "block",
+          "text": "格挡",
+          "tip": "包括基础数值和本地词缀",
+          "minMax": true
+        },
+        {
+          "id": "spirit",
+          "text": "精魂",
+          "tip": "包括基础数值、本地词缀、最大品质",
+          "minMax": true
+        },
+        {
+          "id": "rune_sockets",
+          "text": "增幅器插槽",
+          "minMax": true
+        }
+      ]
+    },
+    {
+      "id": "req_filters",
+      "title": "需求",
+      "hidden": true,
+      "filters": [
+        {
+          "id": "lvl",
+          "text": "等级",
+          "minMax": true
+        },
+        {
+          "id": "str",
+          "text": "力量",
+          "minMax": true
+        },
+        {
+          "id": "dex",
+          "text": "敏捷",
+          "minMax": true
+        },
+        {
+          "id": "int",
+          "text": "智慧",
+          "minMax": true
+        }
+      ]
+    },
+    {
+      "id": "map_filters",
+      "title": "终局过滤器",
+      "hidden": true,
+      "filters": [
+        {
+          "id": "map_tier",
+          "text": "引路石阶级",
+          "minMax": true
+        },
+        {
+          "id": "map_packsize",
+          "text": "引路石怪物群大小增加",
+          "minMax": true
+        },
+        {
+          "id": "map_magic_monsters",
+          "text": "Monster Effectiveness",
+          "minMax": true
+        },
+        {
+          "id": "map_iir",
+          "text": "引路石物品稀有度增加",
+          "tip": "物品稀有度增加",
+          "minMax": true
+        },
+        {
+          "id": "map_rare_monsters",
+          "text": "Monster Rarity",
+          "minMax": true
+        },
+        {
+          "id": "map_revives",
+          "text": "引路石挑战次数",
+          "minMax": true
+        },
+        {
+          "id": "map_bonus",
+          "text": "引路石掉落几率增加",
+          "minMax": true
+        },
+        {
+          "id": "map_gold",
+          "text": "引路石金币增加",
+          "minMax": true
+        },
+        {
+          "id": "map_experience",
+          "text": "引路石经验增加",
+          "minMax": true
+        },
+        {
+          "id": "ultimatum_hint",
+          "text": "致命贪婪试炼提示",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "Victorious",
+                "text": "胜利"
+              },
+              {
+                "id": "Cowardly",
+                "text": "懦弱"
+              },
+              {
+                "id": "Deadly",
+                "text": "危难"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "misc_filters",
+      "title": "其他",
+      "hidden": true,
+      "filters": [
+        {
+          "id": "gem_level",
+          "text": "技能宝石等级",
+          "minMax": true
+        },
+        {
+          "id": "gem_sockets",
+          "text": "宝石插槽",
+          "minMax": true
+        },
+        {
+          "id": "area_level",
+          "text": "区域等级",
+          "minMax": true
+        },
+        {
+          "id": "stack_size",
+          "text": "堆叠数量",
+          "minMax": true
+        },
+        {
+          "id": "identified",
+          "text": "已鉴定",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "fractured_item",
+          "text": "分裂的",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "corrupted",
+          "text": "已腐化",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "sanctified",
+          "text": "已圣化",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "twice_corrupted",
+          "text": "双倍腐化",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "mutated",
+          "text": "培育瓦尔传奇",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "veiled",
+          "text": "未揭露",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "desecrated",
+          "text": "渎灵",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "crafted",
+          "text": "工艺的",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "foreseeing",
+          "text": "预知未来",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "mirrored",
+          "text": "已复制",
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              },
+              {
+                "id": "false",
+                "text": "否"
+              }
+            ]
+          }
+        },
+        {
+          "id": "sanctum_gold",
+          "text": "巨灵币圣水",
+          "minMax": true
+        },
+        {
+          "id": "unidentified_tier",
+          "text": "未鉴定品阶",
+          "minMax": true
+        }
+      ]
+    },
+    {
+      "id": "trade_filters",
+      "title": "交易过滤",
+      "hidden": true,
+      "filters": [
+        {
+          "id": "account",
+          "text": "卖家帐号",
+          "fullSpan": true,
+          "input": {
+            "placeholder": "输入账号名"
+          }
+        },
+        {
+          "id": "collapse",
+          "text": "按账号收起列表",
+          "fullSpan": true,
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "否"
+              },
+              {
+                "id": "true",
+                "text": "是"
+              }
+            ]
+          }
+        },
+        {
+          "id": "indexed",
+          "text": "已上架",
+          "fullSpan": true,
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "任何时间"
+              },
+              {
+                "id": "1hour",
+                "text": "1小时内"
+              },
+              {
+                "id": "3hours",
+                "text": "3小时内"
+              },
+              {
+                "id": "12hours",
+                "text": "12小时内"
+              },
+              {
+                "id": "1day",
+                "text": "1天内"
+              },
+              {
+                "id": "3days",
+                "text": "3天内"
+              },
+              {
+                "id": "1week",
+                "text": "1周内"
+              },
+              {
+                "id": "2weeks",
+                "text": "2周内"
+              },
+              {
+                "id": "1month",
+                "text": "1月内"
+              },
+              {
+                "id": "2months",
+                "text": "1月内"
+              }
+            ]
+          }
+        },
+        {
+          "id": "sale_type",
+          "text": "交易类型",
+          "fullSpan": true,
+          "option": {
+            "options": [
+              {
+                "id": "any",
+                "text": "任何"
+              },
+              {
+                "id": null,
+                "text": "一口价"
+              },
+              {
+                "id": "priced_with_info",
+                "text": "备注标价"
+              },
+              {
+                "id": "unpriced",
+                "text": "无定价"
+              }
+            ]
+          }
+        },
+        {
+          "id": "fee",
+          "text": "金币费用",
+          "fullSpan": true,
+          "minMax": true
+        },
+        {
+          "id": "price",
+          "text": "一口价",
+          "fullSpan": true,
+          "option": {
+            "options": [
+              {
+                "id": null,
+                "text": "崇高石等价物"
+              },
+              {
+                "id": "exalted_divine",
+                "text": "崇高石或神圣石"
+              },
+              {
+                "id": "aug",
+                "text": "增幅石"
+              },
+              {
+                "id": "transmute",
+                "text": "蜕变石"
+              },
+              {
+                "id": "exalted",
+                "text": "崇高石"
+              },
+              {
+                "id": "regal",
+                "text": "富豪石"
+              },
+              {
+                "id": "chaos",
+                "text": "混沌石"
+              },
+              {
+                "id": "vaal",
+                "text": "瓦尔宝珠"
+              },
+              {
+                "id": "alch",
+                "text": "点金石"
+              },
+              {
+                "id": "divine",
+                "text": "神圣石"
+              },
+              {
+                "id": "annul",
+                "text": "剥离石"
+              },
+              {
+                "id": "mirror",
+                "text": "卡兰德的魔镜"
+              }
+            ]
+          },
+          "minMax": true
+        }
+      ]
+    }
+  ]
+}

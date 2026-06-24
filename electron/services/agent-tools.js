@@ -28,11 +28,11 @@ const tools = [
   },
   {
     name: 'search_knowledge',
-    description: '搜索 POE2 游戏知识库(技能/词缀/装备基底数据,来自 Path of Building 2)。当需要查游戏数据、技能效果、词缀数值时使用。',
+    description: '【分析必用】查 POE2 游戏知识库(技能/词缀/装备基底数据)。分析 BD 属性时先查这个获取准确数值,不要编造!',
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: '搜索关键词(中文),如"火抗词缀"、"闪电箭技能"、"胸甲基底"' },
+        query: { type: 'string', description: '搜索关键词。用英文效果最好,如"fire resistance"、"life"、"chest base"、"armour evasion"。也支持中文如"火抗词缀"。' },
         topK: { type: 'integer', description: '返回条数,默认 5' },
       },
       required: ['query'],
@@ -101,23 +101,133 @@ const tools = [
   },
   {
     name: 'search_market',
-    description: '搜索 POE2 国服市集在售装备。可按物品类型和词缀过滤。返回在售列表(名称/词缀/价格/卖家)。',
+    description: '搜索 POE2 国服市集在售装备。只按类型搜(条件极少),返回多个候选结果(含价格/等级/全部词缀)供用户选择。',
     parameters: {
       type: 'object',
       properties: {
-        item_type: { type: 'string', description: '物品类型(国服中文名,如"胸甲"、"单手剑")' },
-        stats: { type: 'array', items: { type: 'string' }, description: '需要的词缀(中文,如"火抗"、"最大生命")' },
-        max_results: { type: 'integer', description: '返回的最大结果数,默认 10' },
+        type: { type: 'string', description: '国服真实基底名。胸甲:蜥鳞外套/蛇鳞外套/皮革背心;戒指:翡翠戒指/蓝玉戒指/紫晶戒指/红玉戒指;项链:日曜项链/赤红项链;腰带:万用腰带/生皮腰带;头盔:海螺头盔;手套:精纺护腕;鞋子:牢靠绑腿;武器:飞翼长矛/分叉长矛。不确定时先调 list_market_slots 查看!' },
+        level: { type: 'integer', description: '角色等级(可选),用于过滤物品等级' },
+        max_results: { type: 'integer', description: '返回条数,默认 15(建议多返回,让用户选)' },
       },
-      required: ['item_type'],
+      required: ['type'],
     },
     async execute(args, ctx) {
+      console.log('[search_market] type:', args.type, 'level:', args.level);
+      if (!ctx.electron) return { error: '市集未登录,无法搜索。请先在设置中登录国服市集(QQ账号)。' };
       const skills = require('./skills');
       const trade = require('./trade');
-      const need = { type: args.item_type, intents: args.stats || [], slot: '' };
-      const query = skills.buildPreciseQuery(need);
-      const results = await trade.search(ctx.electron, query, args.max_results || 10);
-      return { items: results.slice(0, 8).map((it) => ({ name: it.name, price: it.price, mods: it.mods?.slice(0, 4) })) };
+
+      const queryObj = skills.buildPreciseQuery({ type: args.type });
+      const opts = {};
+      if (args.level && args.level > 0) opts.minIlvl = Math.max(1, args.level - 10);
+
+      const max = args.max_results || 15;
+      console.log('[search_market] query:', JSON.stringify(queryObj), 'opts:', JSON.stringify(opts));
+      const results = await trade.search(ctx.electron, queryObj, max, opts);
+
+      // 生成购买链接:国服市集搜索结果页,用户点击即可查看/购买
+      const league = trade.LEAGUE;
+      const searchUrl = `https://poe.game.qq.com/trade2/search/${league}`;
+
+      // 返回完整信息:名称/价格/等级/全部词缀/购买链接,让用户自己选
+      return {
+        searchType: args.type,
+        total: results.total,
+        returned: results.items.length,
+        searchUrl, // 搜索结果页链接(用户可去这里直接看全部结果)
+        items: (results.items || []).map((it) => ({
+          name: it.name || it.typeLine,
+          price: it.price,
+          ilvl: it.ilvl,
+          rarity: it.rarity,
+          mods: it.explicitMods || [],
+          seller: it.seller,
+          // 单件物品购买链接(在搜索结果页定位)
+          buyUrl: `https://poe.game.qq.com/trade2/search/${league}/${results.searchId}`,
+        })),
+      };
+    },
+  },
+  {
+    name: 'list_market_slots',
+    description: '列出所有可搜索的装备部位和对应的国服真实基底名称。不确定物品叫什么时先调这个。',
+    parameters: { type: 'object', properties: {} },
+    async execute() {
+      const skills = require('./skills');
+      return {
+        slots: skills.listSlotTypes(),
+        note: '搜索时 type 必须用上面的真实基底名。只按类型+等级+一口价搜,条件尽量少。',
+      };
+    },
+  },
+  {
+    name: 'search_market_filter',
+    description: '按词缀+数值精确搜索市集。当需要特定数值(如火抗≥30、生命≥60)时用这个。先用 search_market 宽泛搜,如果结果太多再用这个精确过滤。',
+    parameters: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', description: '国服真实基底名,如"翡翠戒指"、"蜥鳞外套"。必填。' },
+        filters: {
+          type: 'array',
+          description: '词缀过滤条件,每个含 name 和可选 min。如 [{"name":"火抗","min":30},{"name":"生命","min":60}]',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: '词缀中文名: 火抗/冰抗/雷抗/混沌抗/生命/魔力/力量/敏捷/智慧/护甲/闪避/能量护盾/格挡/攻击速度/暴击/移动速度' },
+              min: { type: 'number', description: '最小值(可选),如火抗最小30' },
+            },
+          },
+        },
+        level: { type: 'integer', description: '角色等级(可选)' },
+        max_results: { type: 'integer', description: '返回条数,默认 15' },
+      },
+      required: ['type'],
+    },
+    async execute(args, ctx) {
+      if (!ctx.electron) return { error: '市集未登录,无法搜索。请先在设置中登录国服市集(QQ账号)。' };
+      const skills = require('./skills');
+      const trade = require('./trade');
+
+      // 构造带 stats 数值过滤的 query
+      const query = {
+        filters: { trade_filters: { sale_type: { option: 'any' } } },
+        type: args.type,
+      };
+
+      // 把中文词缀名转成 stat ID + 数值
+      if (args.filters && args.filters.length) {
+        const statFilters = [];
+        for (const f of args.filters) {
+          const id = skills.INTENT_MAP[f.name] || skills.STAT_MAP[f.name];
+          if (id) {
+            const filter = { id, disabled: false };
+            if (f.min !== undefined) filter.value = { min: f.min };
+            statFilters.push(filter);
+          }
+        }
+        if (statFilters.length) {
+          query.stats = [{ type: 'and', filters: statFilters }];
+        }
+	      }
+
+      const opts = {};
+      if (args.level && args.level > 0) opts.minIlvl = Math.max(1, args.level - 10);
+      console.log('[search_market_filter] query:', JSON.stringify(query));
+      const results = await trade.search(ctx.electron, query, args.max_results || 15, opts);
+      const league = trade.LEAGUE;
+      return {
+        searchType: args.type,
+        filters: args.filters || [],
+        total: results.total,
+        searchUrl: `https://poe.game.qq.com/trade2/search/${league}`,
+        items: (results.items || []).map((it) => ({
+          name: it.name || it.typeLine,
+          price: it.price,
+          ilvl: it.ilvl,
+          mods: it.explicitMods || [],
+          buyUrl: `https://poe.game.qq.com/trade2/search/${league}/${results.searchId}`,
+        })),
+      };
     },
   },
 ];

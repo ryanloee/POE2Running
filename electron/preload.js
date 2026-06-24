@@ -73,7 +73,6 @@ contextBridge.exposeInMainWorld('api', {
   kbStatus: () => ipcRenderer.invoke('knowledge:status'),
   kbBuildDocs: () => ipcRenderer.invoke('knowledge:buildDocs'),
   kbBuildIndex: () => ipcRenderer.invoke('knowledge:buildIndex'),
-  kbDownloadModel: () => ipcRenderer.invoke('knowledge:downloadModel'),
   kbTestRetrieve: (query) => ipcRenderer.invoke('knowledge:testRetrieve', query),
   kbGetLocalModels: () => ipcRenderer.invoke('knowledge:getLocalModels'),
   onKbProgress: (callback) => {
@@ -87,6 +86,7 @@ contextBridge.exposeInMainWorld('api', {
   tradeOpenLogin: () => ipcRenderer.invoke('trade:openLogin'),
   tradeSearch: (payload) => ipcRenderer.invoke('trade:search', plain(payload)),
   tradeSearchFromAI: (payload) => ipcRenderer.invoke('trade:searchFromAI', plain(payload)),
+  debugSearch: (payload) => ipcRenderer.invoke('trade:debugSearch', plain(payload)),
   onTradeAutoResults: (callback) => {
     const handler = (_e, results) => callback(results);
     ipcRenderer.on('trade:auto-results', handler);
@@ -100,6 +100,11 @@ contextBridge.exposeInMainWorld('api', {
 
   // 导出报告
   exportReport: (bd) => ipcRenderer.invoke('export:report', plain(bd)),
+  // BD 转文本(给对话上下文用,通过IPC在主进程执行)
+  bdToText: (bd) => ipcRenderer.invoke('export:bdToText', plain(bd)),
+  // 记住/读取上次的分享码
+  saveLastCode: (codes) => ipcRenderer.invoke('settings:saveLastCode', plain(codes)),
+  getLastCode: () => ipcRenderer.invoke('settings:getLastCode'),
 
   // 剪贴板
   writeClipboard: (text) => {

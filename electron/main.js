@@ -1,5 +1,5 @@
 // Electron 主进程入口
-const { app, BrowserWindow, ipcMain, dialog, session, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, net, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const trade = require('./services/trade');
@@ -89,6 +89,7 @@ function createWindow() {
     minHeight: 640,
     title: 'POE2 BD 智能配装助手',
     backgroundColor: '#0f1117',
+    autoHideMenuBar: true, // 隐藏顶部 File/Edit/View 菜单栏
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true, // 安全:渲染进程隔离
@@ -96,6 +97,8 @@ function createWindow() {
       sandbox: false,
     },
   });
+  // 彻底移除菜单栏(不只是隐藏)
+  mainWindow.setMenuBarVisibility(false);
 
   if (isDev) {
     // 开发模式:加载 Vite dev server(支持热更新)
@@ -105,6 +108,12 @@ function createWindow() {
     // 生产模式:加载构建产物
     mainWindow.loadFile(path.join(__dirname, '..', 'dist-renderer', 'index.html'));
   }
+
+  // 市集购买链接等外部链接 → 用系统默认浏览器打开
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -282,6 +291,16 @@ function registerIpc() {
     }
   });
 
+  // BD 转精简文本(给 AI 对话上下文用)
+  ipcMain.handle('export:bdToText', async (_event, bd) => {
+    try {
+      const exp = require('./services/export');
+      return exp.bdToText(bd);
+    } catch (e) {
+      return '';
+    }
+  });
+
   // AI 连接测试(发一句"你好"验证)
   ipcMain.handle('ai:test', async (_event, settings) => {
     console.log('[ipc] ai:test 被调用, settings:', JSON.stringify(settings));
@@ -300,25 +319,24 @@ function registerIpc() {
         return { ok: false, error: '市集未登录,请先在「市集」页登录 QQ' };
       }
       const agent = require('./services/ai-agent');
+      const exportMod = require('./services/export');
       // 流式推送思考/搜索过程
-      const result = await agent.runTradeAgent(
-        { session, net },
+      const result = await agent.runAgent({
         settings,
-        payload.bd,
-        payload.question || '',
-        // onChunk:思考过程和推荐文本
-        (chunk) => {
+        userMessage: payload.question || '请分析我的BD并在市集搜索合适的装备推荐给我',
+        systemContext: payload.bd ? exportMod.bdToText(payload.bd) : undefined,
+        electron: { session, net },
+        onChunk: (chunk) => {
           if (!event.sender.isDestroyed()) {
             event.sender.send('agent:chunk', chunk);
           }
         },
-        // onToolCall:搜索过程通知
-        (info) => {
+        onToolCall: (info) => {
           if (!event.sender.isDestroyed()) {
             event.sender.send('agent:tool', info);
           }
-        }
-      );
+        },
+      });
       return { ok: true, ...result };
     } catch (e) {
       console.error('[ai:tradeAgent] 错误:', e.message);
@@ -364,20 +382,21 @@ function registerIpc() {
       const settings = readSettings();
       if (settings.proxyUrl) configureProxy(settings.proxyUrl);
 
-      // 保存用户消息
-      conversation.appendMessage(conversationId, { role: 'user', content: message });
-
-      // 获取对话历史(AI messages 格式)
+      // 获取对话历史(AI messages 格式)— 先不存 user 消息,成功后再存
       const history = conversation.toAIMessages(conversationId);
-      // 去掉最后一条(就是刚加的 user message,runAgent 会自己加)
-      history.pop();
+
+      console.log('[agent:chat] context长度:', context?.length || 0, '历史消息数:', history.length);
 
       // 检查市集登录(如果可能用到市集)
       let tradeSession = null;
       try {
         const loginStatus = await trade.checkLogin({ session, net });
+        console.log('[agent:chat] 市集登录检查:', JSON.stringify(loginStatus));
         if (loginStatus.loggedIn) tradeSession = { session, net };
-      } catch (_) {}
+      } catch (e) {
+        console.error('[agent:chat] 市集登录检查异常:', e.message);
+      }
+      console.log('[agent:chat] tradeSession:', !!tradeSession);
 
       const agent = require('./services/ai-agent');
       let thinkingContent = '';
@@ -402,15 +421,31 @@ function registerIpc() {
         },
       });
 
-      // 保存 assistant 回复
+      // 从 AI 回复文本中智能提取推荐按钮(基于装备类型和词缀关键词)
+      let recommendations = [];
+      try {
+        const skills = require('./services/skills');
+        recommendations = skills.parseAIRecommendations(result.content).map((r) => ({
+          label: `搜${r.intents?.length ? r.intents.join('') : ''}${r.slot || '装备'}`,
+          type: r.type,
+          intent: r.intents?.[0] || '',
+        }));
+        recommendations.push({ label: '深入分析' });
+      } catch (_) {}
+
+      // 成功后才保存消息(失败不留坏历史)
+      conversation.appendMessage(conversationId, { role: 'user', content: message });
+
+      // 只存最终的 assistant 回复(不存 tool_calls/tool 中间消息)
+      // 避免 DeepSeek "tool must follow tool_calls" 等严格格式校验报错
       conversation.appendMessage(conversationId, {
         role: 'assistant',
         content: result.content,
         thinking: thinkingContent || undefined,
-        toolCalls: result.toolCalls?.length ? result.toolCalls : undefined,
+        recommendations,
       });
 
-      return { ok: true, content: result.content, toolCalls: result.toolCalls };
+      return { ok: true, content: result.content, toolCalls: result.toolCalls, recommendations };
     } catch (e) {
       console.error('[agent:chat] 错误:', e.message);
       return { ok: false, error: String(e.message || e) };
@@ -514,6 +549,66 @@ function registerIpc() {
     }
   });
 
+  // 调试:直接测试市集搜索(带应用 cookie),测试多种过滤格式
+  ipcMain.handle('trade:debugSearch', async (_event, payload) => {
+    try {
+      const itemType = payload.type || '翡翠戒指';
+      const skills = require('./services/skills');
+      const lines = [];
+
+      // 测试1: 宽泛搜(只类型)
+      const q1 = skills.buildPreciseQuery({ type: itemType });
+      const r1 = await trade.search({ session, net }, q1, 5);
+      lines.push(`【只类型】 total=${r1.total} 返回${r1.items.length}件`);
+
+      // 测试2: 类型 + 火抗(min:20) - 用正确的 stat ID
+      const fireId = skills.STAT_MAP.fire_resist;
+	      const q2 = {
+	        filters: { trade_filters: { sale_type: { option: 'any' } } },
+	        type: itemType,
+	        stats: [{ type: 'and', filters: [{ id: fireId, disabled: false, value: { min: 20 } }] }],
+	      };
+      console.log('[debug] 火抗过滤 query:', JSON.stringify(q2));
+      const r2 = await trade.search({ session, net }, q2, 5);
+      lines.push(`【火抗≥20】 total=${r2.total} 返回${r2.items.length}件`);
+
+      // 测试3: 类型 + 生命(min:50)
+      const lifeId = skills.STAT_MAP.life;
+	      const q3 = {
+	        filters: { trade_filters: { sale_type: { option: 'any' } } },
+	        type: itemType,
+	        stats: [{ type: 'and', filters: [{ id: lifeId, disabled: false, value: { min: 50 } }] }],
+	      };
+      const r3 = await trade.search({ session, net }, q3, 5);
+      lines.push(`【生命≥50】 total=${r3.total} 返回${r3.items.length}件`);
+
+      // 测试4: 类型 + 火抗 + 生命
+	      const q4 = {
+	        filters: { trade_filters: { sale_type: { option: 'any' } } },
+	        type: itemType,
+	        stats: [{ type: 'and', filters: [
+	          { id: fireId, disabled: false, value: { min: 20 } },
+	          { id: lifeId, disabled: false, value: { min: 50 } },
+	        ] }],
+	      };
+      const r4 = await trade.search({ session, net }, q4, 5);
+      lines.push(`【火抗≥20+生命≥50】 total=${r4.total} 返回${r4.items.length}件`);
+
+      // 列出火抗过滤的几件
+      if (r2.items.length) {
+        lines.push('\n--- 火抗≥20 示例 ---');
+        for (const it of r2.items.slice(0, 3)) {
+          lines.push(`  ${it.price} | ilvl${it.ilvl} | ${(it.explicitMods||[]).slice(0,3).join('; ')}`);
+        }
+      }
+
+      return { ok: true, body: lines.join('\n') };
+    } catch (e) {
+      console.error('[trade:debugSearch] 错误:', e.message);
+      return { ok: false, error: e.message };
+    }
+  });
+
   // 根据 AI 分析结果自动搜装备(提取 AI 提到的装备类型,逐个搜)
   ipcMain.handle('trade:searchFromAI', async (_event, { aiResult, limit }) => {
     try {
@@ -586,6 +681,23 @@ function registerIpc() {
     // 保存后立即重新配置代理(下次请求即生效)
     if (settings.proxyUrl !== undefined) configureProxy(settings.proxyUrl);
     return { ok: true };
+  });
+
+  // 记住/读取上次的 BD 分享码(单独存,不和 API 设置混)
+  const lastCodePath = () => path.join(app.getPath('userData'), 'last-codes.json');
+  ipcMain.handle('settings:saveLastCode', async (_event, codes) => {
+    try { fs.writeFileSync(lastCodePath(), JSON.stringify(codes), 'utf8'); } catch (_) {}
+    return { ok: true };
+  });
+  ipcMain.handle('settings:getLastCode', async () => {
+    try {
+      const data = JSON.parse(fs.readFileSync(lastCodePath(), 'utf8'));
+      console.log('[settings:getLastCode] 读取到:', JSON.stringify(data));
+      return data;
+    } catch (_) {
+      console.log('[settings:getLastCode] 无记录文件');
+      return {};
+    }
   });
 
   // 调试日志(渲染进程 preload 转发到主进程终端)

@@ -19,7 +19,12 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.6;
-  user-select: none;
+}
+
+/* AI 回复、装备词条、输入框 等区域允许选中复制 */
+.ai-bubble, .ai-result, .think-body, .equip-item, .ri-content,
+input, textarea, select, pre, code {
+  user-select: text;
 }
 
 #app {

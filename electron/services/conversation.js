@@ -93,6 +93,7 @@ function appendMessage(id, msg) {
     ...(msg.toolCallId ? { toolCallId: msg.toolCallId } : {}),
     ...(msg.toolName ? { toolName: msg.toolName } : {}),
     ...(msg.thinking ? { thinking: msg.thinking } : {}),
+    ...(msg.recommendations ? { recommendations: msg.recommendations } : {}),
     timestamp: new Date().toISOString(),
   };
   conv.messages.push(entry);
@@ -153,15 +154,28 @@ function deleteConversation(id) {
 function toAIMessages(id) {
   const conv = loadConversation(id);
   if (!conv) return [];
-  return conv.messages.map((m) => {
-    if (m.role === 'tool') {
-      return { role: 'tool', tool_call_id: m.toolCallId, content: m.content };
+
+  // 收集所有 tool 消息的 tool_call_id,用于校验
+  const toolCallIds = new Set();
+  for (const m of conv.messages) {
+    if (m.role === 'tool' && m.toolCallId) toolCallIds.add(m.toolCallId);
+  }
+
+  // 用计数器给每个 tool_call 生成唯一 id
+  let callCounter = 0;
+  const result = [];
+  for (const m of conv.messages) {
+    // 跳过 tool 消息和带 toolCalls 的 assistant 消息(避免 DeepSeek 格式校验报错)
+    // 只保留纯文本的 user/assistant 消息
+    if (m.role === 'tool') continue;
+    if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length) {
+      // 有 tool_calls 但有正文内容,只保留正文
+      if (m.content) result.push({ role: 'assistant', content: m.content });
+      continue;
     }
-    if (m.role === 'assistant' && m.toolCalls) {
-      return { role: 'assistant', content: m.content || null, tool_calls: m.toolCalls };
-    }
-    return { role: m.role, content: m.content };
-  });
+    result.push({ role: m.role, content: m.content });
+  }
+  return result.filter((m) => m);
 }
 
 module.exports = {

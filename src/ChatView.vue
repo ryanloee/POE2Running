@@ -1,5 +1,12 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import Icon from './Icons.vue';
+
+// 接收父组件传入的 BD 上下文文本
+const props = defineProps({
+  contextText: { type: String, default: '' },
+});
+
 import { Marked } from 'marked';
 import markedKatex from 'marked-katex-extension';
 import { markedHighlight } from 'marked-highlight';
@@ -22,82 +29,12 @@ marked.setOptions({ gfm: true, breaks: true });
 
 function renderMd(md) {
   if (!md) return '';
-  try { return marked.parse(md); } catch (_) { return md; }
-}
-
-function extractShareCode(input) {
-  if (!input) return '';
-  let s = input.trim();
-  const m = s.match(/#\/share\/([A-Za-z0-9_\-]+)/);
-  if (m) return m[1];
-  return s.replace(/\s+/g, '');
-}
-
-// ===== 数据来源 =====
-const myShareCode = ref('');
-const myBd = ref(null);
-const myBdLoading = ref(false);
-const myBdError = ref('');
-
-const targetMode = ref('none');
-const targetShareCode = ref('');
-const targetBd = ref(null);
-const targetBdLoading = ref(false);
-const targetBdError = ref('');
-const targetDocName = ref('');
-const targetDocText = ref('');
-
-const contextText = computed(() => {
-  let parts = [];
-  if (myBd.value) {
-    const role = myBd.value.role || {};
-    const panel = myBd.value.panel || {};
-    const eqList = (myBd.value.equipments || []).map((e) => `- [${e.slotName}] ${e.name ? e.name + ' ' : ''}${e.typeLine}`).join('\n');
-    parts.push(`【当前分析角色】${role.name || ''} (${role.class_name || ''} Lv${role.level || ''})\n面板: 生命${panel.life||'-'} 火抗${panel.fire_resistance||'-'}% 冰抗${panel.cold_resistance||'-'}% 雷抗${panel.lightning_resistance||'-'}%\n装备:\n${eqList}`);
-  }
-  if (targetMode.value === 'bd' && targetBd.value) {
-    const role = targetBd.value.role || {};
-    parts.push(`【目标 BD】${role.name || ''} (${role.class_name || ''} Lv${role.level || ''})`);
-  }
-  if (targetMode.value === 'doc' && targetDocText.value) {
-    parts.push(`【目标配装文档: ${targetDocName.value}】\n${targetDocText.value.slice(0, 3000)}`);
-  }
-  return parts.join('\n\n');
-});
-
-async function fetchMyBD() {
-  const code = extractShareCode(myShareCode.value);
-  if (!code) { myBdError.value = '请输入分享码'; return; }
-  myBdLoading.value = true; myBdError.value = ''; myBd.value = null;
   try {
-    const res = await window.api.fetchBD(code);
-    if (!res.ok) throw new Error(res.error);
-    myBd.value = res.data;
-  } catch (e) { myBdError.value = e.message; }
-  finally { myBdLoading.value = false; }
-}
-
-async function fetchTargetBD() {
-  const code = extractShareCode(targetShareCode.value);
-  if (!code) { targetBdError.value = '请输入分享码'; return; }
-  targetBdLoading.value = true; targetBdError.value = ''; targetBd.value = null;
-  try {
-    const res = await window.api.fetchBD(code);
-    if (!res.ok) throw new Error(res.error);
-    targetBd.value = res.data;
-  } catch (e) { targetBdError.value = e.message; }
-  finally { targetBdLoading.value = false; }
-}
-
-async function uploadTargetDoc() {
-  const res = await window.api.openFile();
-  if (!res.ok) return;
-  const parsed = await window.api.parseDoc(res.filePath);
-  if (!parsed.ok) { targetBdError.value = '解析失败: ' + parsed.error; return; }
-  targetDocName.value = res.filePath.split(/[\\/]/).pop();
-  targetDocText.value = parsed.data.text;
-  targetMode.value = 'doc';
-  targetBdError.value = '';
+    let html = marked.parse(md);
+    // 所有外部链接在新窗口打开(市集购买链接等)
+    html = html.replace(/<a\s+href=/g, '<a target="_blank" rel="noopener noreferrer" href=');
+    return html;
+  } catch (_) { return md; }
 }
 
 // ===== 对话 =====
@@ -106,7 +43,6 @@ const currentConvId = ref(null);
 const messages = ref([]);
 const inputText = ref('');
 const sending = ref(false);
-const drawerOpen = ref(false);
 const toolCalls = ref([]);
 const streamingThinking = ref('');
 const streamingContent = ref('');
@@ -126,7 +62,6 @@ async function switchConversation(id) {
   currentConvId.value = id;
   const conv = await window.api.agentHistory(id);
   messages.value = conv ? conv.messages : [];
-  drawerOpen.value = false;
   scrollToBottom();
 }
 async function newConversation() {
@@ -174,13 +109,14 @@ async function sendMessage() {
     const res = await window.api.agentChat({
       conversationId: currentConvId.value,
       message: text,
-      context: contextText.value || undefined,
+      context: props.contextText || undefined,
     });
     messages.value.push({
       role: 'assistant',
       content: res.ok ? res.content : ('❌ ' + res.error),
       thinking: streamingThinking.value || undefined,
       toolCalls: toolCalls.value.length ? [...toolCalls.value] : undefined,
+      recommendations: res.ok ? res.recommendations : undefined,
       timestamp: new Date().toISOString(),
     });
     await loadConversations();
@@ -206,89 +142,41 @@ onMounted(async () => {
   if (conversations.value.length > 0) await switchConversation(conversations.value[0].id);
 });
 onUnmounted(() => { if (offChunk) offChunk(); if (offTool) offTool(); });
+
+// 快捷按钮:点击后根据推荐内容发送搜索或分析指令
+function quickAction(rec) {
+  let msg;
+  if (rec.type) {
+    // 有 type → 触发市集搜索
+    msg = `帮我搜便宜的${rec.type}${rec.intent ? '，要' + rec.intent + '词缀' : ''}，列出5个候选并给出购买链接`;
+  } else {
+    // 无 type → 深入分析
+    msg = rec.label === '深入分析' ? '请进一步深入分析我的 BD，给出更详细的改进方向' : rec.label;
+  }
+  inputText.value = msg;
+  sendMessage();
+}
+
+// 暴露对话管理方法给父组件(App.vue 弹窗用)
+defineExpose({
+  conversations, currentConvId,
+  newConversation, switchConversation, deleteConv,
+  sendCustomMessage: (text) => { inputText.value = text; sendMessage(); },
+});
 </script>
 
 <template>
   <div class="poe-chat">
-    <!-- 侧边栏遮罩 -->
-    <div v-if="drawerOpen" class="drawer-mask" @click="drawerOpen = false"></div>
-
-    <!-- 侧边栏浮层 -->
-    <aside class="drawer" :class="{ open: drawerOpen }">
-      <!-- 头部 -->
-      <div class="drawer-head">
-        <span class="drawer-brand">⚔ POE2 配装助手</span>
-        <button class="drawer-close" @click="drawerOpen = false">✕</button>
-      </div>
-
-      <!-- 数据来源 -->
-      <section class="drawer-section">
-        <h4 class="ds-title">⚙ 数据来源</h4>
-
-        <div class="ds-block">
-          <div class="ds-label">📌 我的 BD</div>
-          <div class="ds-input-row">
-            <input v-model="myShareCode" placeholder="分享码或链接" class="ds-input" @keyup.enter="fetchMyBD" />
-            <button class="ds-go" @click="fetchMyBD" :disabled="myBdLoading">{{ myBdLoading ? '⏳' : '查询' }}</button>
-          </div>
-          <div v-if="myBd" class="ds-ok">✅ {{ myBd.role?.name }} · {{ myBd.role?.class_name }} Lv{{ myBd.role?.level }}</div>
-          <div v-if="myBdError" class="ds-err">{{ myBdError }}</div>
-        </div>
-
-        <div class="ds-block">
-          <div class="ds-label">🎯 对比目标</div>
-          <div class="seg">
-            <button :class="['seg-btn', targetMode === 'none' && 'on']" @click="targetMode = 'none'">无</button>
-            <button :class="['seg-btn', targetMode === 'bd' && 'on']" @click="targetMode = 'bd'">目标BD</button>
-            <button :class="['seg-btn', targetMode === 'doc' && 'on']" @click="targetMode = 'doc'">文档</button>
-          </div>
-          <div v-if="targetMode === 'bd'" class="ds-input-row">
-            <input v-model="targetShareCode" placeholder="目标BD分享码" class="ds-input" @keyup.enter="fetchTargetBD" />
-            <button class="ds-go" @click="fetchTargetBD" :disabled="targetBdLoading">{{ targetBdLoading ? '⏳' : '查询' }}</button>
-          </div>
-          <div v-if="targetMode === 'bd' && targetBd" class="ds-ok">✅ {{ targetBd.role?.name }} · {{ targetBd.role?.class_name }} Lv{{ targetBd.role?.level }}</div>
-          <div v-if="targetMode === 'doc'">
-            <button class="ds-upload" @click="uploadTargetDoc">📎 选择文档</button>
-            <div v-if="targetDocName" class="ds-ok">✅ {{ targetDocName }}</div>
-          </div>
-          <div v-if="targetBdError" class="ds-err">{{ targetBdError }}</div>
-        </div>
-
-        <!-- 已加载标签 -->
-        <div v-if="myBd || (targetMode !== 'none')" class="ctx-tags">
-          <span v-if="myBd" class="ctx-tag">📌 {{ myBd.role?.name }}</span>
-          <span v-if="targetMode === 'bd' && targetBd" class="ctx-tag">🎯 {{ targetBd.role?.name }}</span>
-          <span v-if="targetMode === 'doc' && targetDocName" class="ctx-tag">📄 {{ targetDocName }}</span>
-        </div>
-      </section>
-
-      <!-- 对话历史 -->
-      <section class="drawer-section flex-grow">
-        <div class="ds-title-row">
-          <h4 class="ds-title">💬 历史</h4>
-          <button class="ds-new" @click="newConversation">＋</button>
-        </div>
-        <div class="conv-scroll">
-          <div v-for="c in conversations" :key="c.id" :class="['conv', currentConvId === c.id && 'active']" @click="switchConversation(c.id)">
-            <span class="conv-name">{{ c.title }}</span>
-            <button class="conv-x" @click.stop="deleteConv(c.id)">×</button>
-          </div>
-          <div v-if="!conversations.length" class="conv-empty">暂无对话</div>
-        </div>
-      </section>
-    </aside>
-
     <!-- 消息区（纯对话,占据全部高度,内部滚动） -->
     <main class="messages" ref="messagesEl">
       <!-- 空状态 -->
       <div v-if="!messages.length && !sending" class="welcome">
-        <div class="welcome-icon">⚔</div>
+        <div class="welcome-icon"><Icon name="sword" :size="48" /></div>
         <h2>POE2 BD 智能配装</h2>
-        <p>点底部 <strong>☰</strong> 配置 BD 和对比目标，然后直接提问。<br>也可以不配 BD，直接问任何游戏问题。</p>
+        <p>已自动加载你的 BD。直接提问即可,或点顶栏 <strong>BD 比对</strong> 配置对比目标。<br>先对比分析差距,再推荐装备!</p>
         <div class="welcome-actions">
-          <button class="wa-btn" @click="drawerOpen = true">⚙ 配置数据来源</button>
-          <button class="wa-btn ghost" @click="inputText = '帮我查一下火抗词缀最高能到多少'; sendMessage()">📚 查知识库</button>
-          <button class="wa-btn ghost" @click="inputText = '帮我搜一下便宜的火抗胸甲'; sendMessage()">🛒 搜市集</button>
+          <button class="wa-btn ghost" @click="inputText = '帮我查一下火抗词缀最高能到多少'; sendMessage()"><Icon name="book" :size="14" /> 查知识库</button>
+          <button class="wa-btn ghost" @click="inputText = '帮我搜一下便宜的火抗胸甲'; sendMessage()"><Icon name="shopping" :size="14" /> 搜市集</button>
         </div>
       </div>
 
@@ -300,16 +188,22 @@ onUnmounted(() => { if (offChunk) offChunk(); if (offTool) offTool(); });
         <div v-else-if="msg.role === 'assistant'" class="bubble-row ai">
           <div v-if="msg.toolCalls?.length" class="tools">
             <div v-for="(tc, j) in msg.toolCalls" :key="j" class="tool">
-              <span class="tool-icon">{{ tc.status === 'done' ? '✅' : '⏳' }}</span>
+              <span class="tool-icon"><Icon :name="tc.status === 'done' ? 'check' : 'refresh'" :size="12" /></span>
               <span class="tool-name">{{ tc.name }}</span>
               <span v-if="tc.args" class="tool-args">{{ JSON.stringify(tc.args).slice(0, 60) }}</span>
             </div>
           </div>
           <details v-if="msg.thinking" class="think">
-            <summary>🧠 思考过程</summary>
+            <summary>思考过程</summary>
             <div class="think-body">{{ msg.thinking }}</div>
           </details>
           <div class="bubble ai-bubble" v-html="renderMd(msg.content)"></div>
+          <!-- 智能推荐按钮:只在最后一条 AI 消息且非发送中时显示 -->
+          <div v-if="!sending && i === messages.length - 1 && msg.recommendations?.length" class="quick-actions">
+            <button v-for="(rec, k) in msg.recommendations" :key="k" class="qa-btn" @click="quickAction(rec)">
+              <Icon :name="rec.type ? 'shopping' : 'compare'" :size="13" /> {{ rec.label }}
+            </button>
+          </div>
         </div>
       </template>
 
@@ -317,13 +211,13 @@ onUnmounted(() => { if (offChunk) offChunk(); if (offTool) offTool(); });
       <div v-if="sending" class="bubble-row ai">
         <div v-if="toolCalls.length" class="tools">
           <div v-for="(tc, j) in toolCalls" :key="j" class="tool">
-            <span class="tool-icon">{{ tc.status === 'done' ? '✅' : '⏳' }}</span>
+            <span class="tool-icon"><Icon :name="tc.status === 'done' ? 'check' : 'refresh'" :size="12" /></span>
             <span class="tool-name">{{ tc.name }}</span>
             <span v-if="tc.args" class="tool-args">{{ JSON.stringify(tc.args).slice(0, 60) }}</span>
           </div>
         </div>
         <details v-if="streamingThinking" class="think" open>
-          <summary>🧠 思考中...</summary>
+          <summary>思考中...</summary>
           <div class="think-body">{{ streamingThinking }}</div>
         </details>
         <div v-if="streamingContent" class="bubble ai-bubble" v-html="renderMd(streamingContent)"></div>
@@ -331,14 +225,11 @@ onUnmounted(() => { if (offChunk) offChunk(); if (offTool) offTool(); });
       </div>
     </main>
 
-    <!-- 输入栏（菜单按钮在此） -->
+    <!-- 输入栏 -->
     <footer class="input-bar">
-      <button class="menu-btn" @click="drawerOpen = true" title="数据来源 / 历史">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
       <textarea v-model="inputText" @keydown="onKeydown" placeholder="输入消息... (Enter 发送)" rows="1" :disabled="sending"></textarea>
-      <button class="send" @click="sendMessage" :disabled="sending || !inputText.trim()">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+      <button class="send" @click="sendMessage" :disabled="sending || !inputText.trim()" title="发送">
+        <Icon name="send" :size="18" />
       </button>
     </footer>
   </div>
@@ -371,98 +262,6 @@ onUnmounted(() => { if (offChunk) offChunk(); if (offTool) offTool(); });
 .poe-chat ::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 3px; }
 .poe-chat ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
 
-/* ===== 侧边栏浮层 ===== */
-.drawer-mask {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-  z-index: 40; backdrop-filter: blur(2px);
-}
-.drawer {
-  position: fixed; top: 0; left: 0; bottom: 0; width: 300px;
-  background: var(--bg-elev); border-right: 1px solid var(--border-lit);
-  z-index: 50; transform: translateX(-100%);
-  transition: transform .25s ease; display: flex; flex-direction: column;
-  box-shadow: 4px 0 30px rgba(0,0,0,0.4);
-}
-.drawer.open { transform: translateX(0); }
-
-/* 侧边栏头部 */
-.drawer-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px; border-bottom: 1px solid var(--gold-dim);
-}
-.drawer-brand { font-size: 14px; font-weight: 700; color: var(--gold); letter-spacing: .5px; }
-.drawer-close {
-  background: none; border: none; color: var(--text-dim);
-  font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px;
-}
-.drawer-close:hover { color: var(--text); background: var(--bg-hover); }
-
-.drawer-section { border-bottom: 1px solid var(--border); }
-.drawer-section.flex-grow { flex: 1; display: flex; flex-direction: column; border-bottom: none; overflow: hidden; }
-
-.ds-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); padding: 14px 16px 8px; font-weight: 700; }
-.ds-title-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; }
-.ds-new { background: none; border: 1px solid var(--border); color: var(--gold); width: 26px; height: 26px; border-radius: 6px; cursor: pointer; font-size: 16px; }
-.ds-new:hover { border-color: var(--gold); background: var(--gold-glow); }
-
-.ds-block { padding: 0 16px 14px; }
-.ds-label { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; font-weight: 600; }
-.ds-input-row { display: flex; gap: 6px; }
-.ds-input {
-  flex: 1; background: var(--bg); border: 1px solid var(--border);
-  border-radius: 6px; padding: 7px 10px; color: var(--text);
-  font-size: 12px; outline: none; transition: border-color .15s;
-}
-.ds-input:focus { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold-glow); }
-.ds-go {
-  background: var(--gold-dim); color: var(--text); border: none;
-  border-radius: 6px; padding: 7px 14px; font-size: 12px;
-  cursor: pointer; white-space: nowrap; font-weight: 600;
-}
-.ds-go:hover:not(:disabled) { background: var(--gold); color: var(--bg); }
-.ds-go:disabled { opacity: .4; }
-.ds-ok { margin-top: 6px; font-size: 12px; color: var(--success); }
-.ds-err { margin-top: 6px; font-size: 12px; color: var(--danger); }
-.ds-upload {
-  width: 100%; background: var(--bg); border: 1px dashed var(--border-lit);
-  border-radius: 6px; padding: 8px; font-size: 12px; cursor: pointer;
-  color: var(--text-dim); transition: all .15s;
-}
-.ds-upload:hover { border-color: var(--gold); color: var(--gold); }
-
-/* 已加载标签（侧边栏内） */
-.ctx-tags { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 14px; }
-.ctx-tag {
-  background: var(--gold-glow); border: 1px solid var(--gold-dim);
-  border-radius: 12px; padding: 3px 10px; font-size: 11px;
-  color: var(--gold); white-space: nowrap;
-}
-
-/* 分段控件 */
-.seg { display: flex; gap: 0; margin-bottom: 8px; background: var(--bg); border-radius: 6px; padding: 2px; }
-.seg-btn {
-  flex: 1; background: none; border: none; color: var(--text-dim);
-  padding: 5px; font-size: 11px; cursor: pointer; border-radius: 4px;
-  font-weight: 600; transition: all .15s;
-}
-.seg-btn.on { background: var(--gold-dim); color: var(--text); }
-.seg-btn:hover:not(.on) { color: var(--text); }
-
-/* 对话历史列表 */
-.conv-scroll { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
-.conv {
-  padding: 9px 12px; border-radius: 6px; cursor: pointer;
-  margin-bottom: 2px; display: flex; align-items: center;
-  justify-content: space-between; transition: background .1s;
-}
-.conv:hover { background: var(--bg-hover); }
-.conv.active { background: var(--gold-glow); border-left: 2px solid var(--gold); }
-.conv-name { font-size: 13px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.conv-x { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 0 4px; opacity: 0; transition: opacity .1s; }
-.conv:hover .conv-x { opacity: 1; }
-.conv-x:hover { color: var(--danger); }
-.conv-empty { text-align: center; color: var(--text-dim); padding: 30px; font-size: 13px; }
-
 /* ===== 消息区 ===== */
 .messages { flex: 1; overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 18px; }
 
@@ -485,7 +284,7 @@ onUnmounted(() => { if (offChunk) offChunk(); if (offTool) offTool(); });
 .bubble-row { display: flex; max-width: 100%; }
 .bubble-row.user { justify-content: flex-end; }
 .bubble-row.ai { justify-content: flex-start; flex-direction: column; align-items: flex-start; gap: 8px; max-width: 85%; }
-.bubble { padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.8; }
+.bubble { padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.8; user-select: text; }
 .user-bubble {
   background: linear-gradient(135deg, var(--gold-dim), var(--gold));
   color: #1a1208; border-radius: 14px 14px 4px 14px;
@@ -541,19 +340,31 @@ onUnmounted(() => { if (offChunk) offChunk(); if (offTool) offTool(); });
 .typing span:nth-child(3) { animation-delay: .4s; }
 @keyframes blink { 0%,80%,100% { opacity: .2; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
 
+/* ===== 快捷操作按钮(跟在 AI 消息后面) ===== */
+.quick-actions {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 10px; padding: 0;
+  max-width: 100%;
+}
+.qa-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px; white-space: nowrap;
+  background: var(--bg); border: 1px solid var(--border-lit);
+  border-radius: 14px; color: var(--text-dim);
+  font-size: 12px; cursor: pointer;
+  transition: all .15s;
+}
+.qa-btn:hover {
+  border-color: var(--gold); color: var(--gold);
+  background: var(--gold-glow);
+}
+
 /* ===== 输入栏 ===== */
 .input-bar {
   display: flex; align-items: flex-end; gap: 10px;
   padding: 12px 18px; background: var(--bg-elev);
   border-top: 1px solid var(--border); flex-shrink: 0;
 }
-.menu-btn {
-  background: none; border: 1px solid var(--border); color: var(--text-dim);
-  border-radius: 10px; width: 42px; height: 42px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  transition: all .15s;
-}
-.menu-btn:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-glow); }
 .input-bar textarea {
   flex: 1; background: var(--bg); border: 1px solid var(--border);
   border-radius: 12px; padding: 11px 16px; color: var(--text);
